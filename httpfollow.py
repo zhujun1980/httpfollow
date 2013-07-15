@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 
 """
-httpfollow http://www.example.com 1024
+httpfollow http://www.example.com -c 1024
+httpfollow http://www.example.com -c 2000 -f
 """
 import base64, re, time, sys, argparse
 from urllib2 import Request, URLError, HTTPError, urlopen, HTTPBasicAuthHandler
 from urlparse import urlparse, urlsplit, SplitResult
 
 class HttpFollow:
-	def __init__(self, url, lsize):
-		self.lsize = lsize
+	def __init__(self, url, options):
+		self.options = options
 		self.position = None
 		self._parseurl(url)
 		self._prepare()
@@ -38,45 +39,37 @@ class HttpFollow:
 		elif begin == None and end <> None:
 			self.fetcher.headers["Range"] = 'bytes=-%s' % (end)
 
-		try:
-			f = urlopen(self.fetcher)
-			d = f.read()
-			if f.code == 206:
-				crange = f.headers['Content-Range']
-				m = re.search("^.*\/(\d*)$", crange)
-				pos = int(m.group(1)) - 1
-				if pos <> self.position:
-					self.position = pos
-					print d
-			elif f.code == 200:
-				self.position = len(d)
+		f = urlopen(self.fetcher)
+		d = f.read()
+		if f.code == 206:
+			crange = f.headers['Content-Range']
+			m = re.search("^.*\/(\d*)$", crange)
+			pos = int(m.group(1)) - 1
+			if pos <> self.position:
+				self.position = pos
 				print d
-			else:
-				print f.headers
-				print d
-			return True
-		except URLError, msg:
-			print msg
-			return False
-		except HTTPError, msg:
-			print msg
-			return False
+		elif f.code == 200:
+			self.position = len(d)
+			print d
+		else:
+			print f.headers
+			print d
 
 	def fetch(self):
-		while True:
-			ret = False
-			if self.position == None:
-				ret = self.fetch_range(None, self.lsize)
-			else:
-				ret = self.fetch_range(self.position, None)
-			if ret == False:
-				break
+		self.fetch_range(None, options.c)
+		while options.f:
+			self.fetch_range(self.position, None)
 			time.sleep(1)
 
 if __name__ == '__main__':
-	script, url, lsize = sys.argv
-	httpfollow = HttpFollow(url, lsize)
+	parser = argparse.ArgumentParser(description='')
+	parser.add_argument('url', metavar='URL')
+	parser.add_argument('-f', action='store_const', const=True)
+	parser.add_argument('-c', type=int, metavar='number', default=1024)
+	options = parser.parse_args()
+
 	try:
+		httpfollow = HttpFollow(options.url, options)
 		httpfollow.fetch()
 	except KeyboardInterrupt:
 		pass
